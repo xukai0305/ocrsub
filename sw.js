@@ -5,11 +5,15 @@
 
 const CACHE_NAME = 'paddleocr-assets-v2'
 // 이 호스트로 가는 요청만 캐시 대상으로 삼는다 (모델 파일 + onnxruntime wasm/js).
-// bcebos.com = PaddleOCR 공식 모델 CDN(중국), cdn.jsdelivr.net = onnxruntime-web wasm 및
-// (자체 호스팅 시) jsDelivr의 GitHub 프록시(cdn.jsdelivr.net/gh/...), raw.githubusercontent.com =
-// 모델을 GitHub 저장소에 직접 올려 raw로 받는 경우, github.com = GitHub Releases에 첨부파일로
-// 올린 경우(주소가 github.com/사용자/저장소/releases/download/... 형태라서 필요).
-const CACHEABLE_HOSTS = ['bcebos.com', 'cdn.jsdelivr.net', 'raw.githubusercontent.com', 'github.com']
+// bcebos.com = PaddleOCR 공식 모델 CDN(중국), cdn.jsdelivr.net = onnxruntime-web wasm.
+// * GitHub(raw.githubusercontent.com / github.com)은 일부러 뺐다 — 서비스워커가 이 두 호스트로 가는
+//   요청을 가로채서 재요청하면 이유를 알 수 없는 CORS 에러가 계속 나서(정작 GitHub 응답 자체엔
+//   Access-Control-Allow-Origin: * 가 정상적으로 들어있는데도), 여러 방법으로도 해결이 안 됐다.
+//   그래서 GitHub 쪽 파일은 서비스워커를 거치지 않고 브라우저가 알아서 직접 받아가게 그냥 둔다
+//   (그래도 GitHub는 응답이 빠른 CDN이라 매번 크게 오래 걸리진 않는다 — 다만 브라우저 기본 HTTP
+//   캐시만 쓰게 되어 bcebos.com/jsdelivr처럼 영구 캐시는 아니고, GitHub가 보내는
+//   cache-control(약 5분)만큼만 짧게 캐시된다).
+const CACHEABLE_HOSTS = ['bcebos.com', 'cdn.jsdelivr.net']
 
 // 사용자가 앱을 열자마자(=OCR 영역을 지정하기 한참 전에) 백그라운드로 미리 받아둔다.
 // 이렇게 해두면 첫 PaddleOCR 사용 시점에도 이미 캐시가 채워져 있어서 대기 시간이 크게 줄어든다.
