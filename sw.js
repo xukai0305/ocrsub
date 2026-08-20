@@ -3,7 +3,7 @@
 // (라이브러리가 명시적으로 막아둠) 앱 코드로는 캐싱을 못 하고, 이렇게 네트워크 계층에서 가로채는
 // 서비스워커로 처리한다. 페이지를 새로고침해도, 다른 영상을 열어도 이 캐시는 그대로 남아 있다.
 
-const CACHE_NAME = 'paddleocr-assets-v1'
+const CACHE_NAME = 'paddleocr-assets-v2'
 // 이 호스트로 가는 요청만 캐시 대상으로 삼는다 (모델 파일 + onnxruntime wasm/js).
 // bcebos.com = PaddleOCR 공식 모델 CDN(중국), cdn.jsdelivr.net = onnxruntime-web wasm 및
 // (자체 호스팅 시) jsDelivr의 GitHub 프록시(cdn.jsdelivr.net/gh/...), raw.githubusercontent.com =
@@ -53,19 +53,27 @@ function isCacheable(url) {
 self.addEventListener('fetch', (event) => {
   const { request } = event
   if (request.method !== 'GET' || !isCacheable(request.url)) return
+  const url = request.url
 
   event.respondWith((async () => {
     const cache = await caches.open(CACHE_NAME)
-    const cached = await cache.match(request)
+    // 캐시 키는 url 문자열로 통일한다 (아래에서 새로 만드는 요청과 짝이 맞아야 cache.match가 찾는다).
+    const cached = await cache.match(url)
     if (cached) return cached
     try {
-      const response = await fetch(request)
+      // 원본 request 객체를 그대로 fetch()에 넘기지 않고, url 문자열만 가지고 새 요청을 만든다.
+      // 원본 request는 PaddleOCR 워커(별도 스레드) 안에서 만들어진 건데, 그 안에 담긴 mode/credentials
+      // 값을 서비스워커가 그대로 이어받아 재요청하면 (둘 다 정상 값이어도) 왜인지 cross-origin
+      // 요청이 CORS 에러로 막히는 경우가 있었다 (raw.githubusercontent.com은 Access-Control-Allow-Origin: *
+      // 를 정상적으로 보내는데도 막혔다). url 문자열만으로 새로 fetch하면 기본값(mode: 'cors',
+      // credentials: 'same-origin')으로 깨끗하게 다시 요청하게 되어 이 문제를 피할 수 있다.
+      const response = await fetch(url)
       // 응답이 정상이면(불완전/에러 응답은 캐시하지 않음) 다음번을 위해 저장해 둔다.
-      if (response && response.ok) cache.put(request, response.clone())
+      if (response && response.ok) cache.put(url, response.clone())
       return response
     } catch (err) {
       // 네트워크 실패 시, 혹시 예전에 받아둔 게 있으면 그거라도 준다.
-      const fallback = await cache.match(request)
+      const fallback = await cache.match(url)
       if (fallback) return fallback
       throw err
     }
